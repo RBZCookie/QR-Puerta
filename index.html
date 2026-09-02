@@ -17,62 +17,84 @@
       justify-content: center;
       height: 100vh;
       overflow: hidden;
+      position: relative;
     }
     h1 {
-      font-size: 1.3rem;
-      margin-bottom: 12px;
+      font-size: 1.5rem;
+      margin-bottom: 20px;
       color: #ccc;
+      z-index: 10;
     }
     #reader {
       width: 95vw;
-      max-width: 500px;
+      max-width: 600px;
       border-radius: 12px;
       overflow: hidden;
-      border: 2px solid #333;
+      border: 3px solid #333;
       background: #000;
+      z-index: 10;
     }
     #reader video {
       object-fit: cover;
-      border-radius: 10px;
+      border-radius: 9px;
     }
-    #status {
-      margin-top: 18px;
-      padding: 14px 20px;
-      font-size: 1.2rem;
-      font-weight: bold;
-      border-radius: 8px;
-      text-align: center;
-      width: 95vw;
-      max-width: 500px;
-      transition: all 0.25s ease;
-      min-height: 110px; /* Un poco más alto para las nuevas líneas */
+    
+    /* --- ESTILOS DEL POP-UP (OVERLAY) --- */
+    #overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
       display: flex;
       flex-direction: column;
+      align-items: center;
       justify-content: center;
+      z-index: 9999; /* Por encima de todo */
+      opacity: 0;
+      pointer-events: none; /* Para que no estorbe si está invisible */
+      transition: opacity 0.3s ease;
+      text-align: center;
+      padding: 20px;
     }
-    .idle { background: #222; color: #888; border: 1px solid #333; }
-    .loading { background: #0277bd; color: #fff; }
-    .success { background: #00c853; color: #fff; box-shadow: 0px 4px 10px rgba(0,200,83,0.3); }
-    .error { background: #d50000; color: #fff; }
-    .nombre-socio { font-size: 1.1rem; font-weight: bold; margin-top: 6px; }
-    .texto-secundario { font-size: 0.9em; font-weight: normal; margin-top: 4px; }
+    
+    /* Clases para mostrar el pop-up */
+    #overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #overlay.loading { background-color: rgba(2, 119, 189, 0.95); }
+    #overlay.success { background-color: rgba(0, 200, 83, 1); } /* Verde sólido */
+    #overlay.error { background-color: rgba(213, 0, 0, 1); }    /* Rojo sólido */
+
+    /* Tipografía grande para el pop-up */
+    .icono-popup { font-size: 4rem; margin-bottom: 10px; }
+    .titulo-popup { font-size: 2.5rem; font-weight: bold; margin-bottom: 20px; text-transform: uppercase; }
+    .nombre-socio { font-size: 3rem; font-weight: bold; margin-bottom: 15px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+    .texto-secundario { font-size: 1.5rem; margin-top: 10px; }
+    .alerta-dias { color: #ffeb3b; font-weight: bold; font-size: 1.8rem; margin-top: 15px; }
   </style>
 </head>
 <body>
 
   <h1>Control de Acceso</h1>
   <div id="reader"></div>
-  <div id="status" class="idle">Apunta tu código QR a la cámara</div>
+
+  <!-- POP-UP QUE CUBRE LA PANTALLA -->
+  <div id="overlay">
+    <div id="overlay-content"></div>
+  </div>
 
   <script>
-    const statusDiv = document.getElementById('status');
+    const overlay = document.getElementById('overlay');
+    const overlayContent = document.getElementById('overlay-content');
     let isScanningLocked = false;
     let html5QrCode = null;
 
     function resetReader(delayMs) {
       setTimeout(() => {
-        statusDiv.className = 'idle';
-        statusDiv.innerHTML = 'Apunta tu código QR a la cámara';
+        overlay.className = ''; // Quita todas las clases (oculta el pop-up)
+        overlayContent.innerHTML = '';
         isScanningLocked = false;
       }, delayMs);
     }
@@ -81,20 +103,26 @@
       if (isScanningLocked) return;
       isScanningLocked = true;
 
-      statusDiv.className = 'loading';
-      statusDiv.innerText = 'Validando acceso...';
+      // Muestra pantalla azul de carga
+      overlay.className = 'show loading';
+      overlayContent.innerHTML = `
+        <div class="icono-popup">⏳</div>
+        <div class="titulo-popup">Validando acceso...</div>
+      `;
 
-      // 1. Filtrar QRs falsos
       const esScriptValido = decodedText.includes("script.google.com") || decodedText.includes("script.googleusercontent.com");
 
       if (!esScriptValido) {
-        statusDiv.className = 'error';
-        statusDiv.innerText = 'QR inválido / No autorizado';
-        resetReader(3000);
+        overlay.className = 'show error';
+        overlayContent.innerHTML = `
+          <div class="icono-popup">🚫</div>
+          <div class="titulo-popup">QR Inválido</div>
+          <div class="texto-secundario">Este código no pertenece al sistema.</div>
+        `;
+        resetReader(3500);
         return;
       }
 
-      // 2. Extraer el ID de Socio de la URL del QR (ej. ...?socio=123)
       let requestUrl = decodedText;
       let socioId = "N/A";
       try {
@@ -102,46 +130,42 @@
         if (urlParams.has('socio')) socioId = urlParams.get('socio');
       } catch(e) {}
 
-      // 3. Agregar el parámetro api=1
       if (!requestUrl.includes("api=1")) {
         requestUrl += (requestUrl.includes("?") ? "&" : "?") + "api=1";
       }
 
-      // 4. Hacer la petición a Google
       fetch(requestUrl)
         .then(response => response.text())
         .then(text => {
           const datos = text.split('|');
           const estatus = datos[0]; 
           const nombreSocio = datos[1] || "Socio no encontrado";
-          const fechaTexto = datos[2] || ""; // Viene como dd/MM/yyyy
+          const fechaTexto = datos[2] || ""; 
 
-          // 5. Calcular los días restantes
           let diasRestantesTxt = "";
           if (fechaTexto) {
-            const partes = fechaTexto.split('/'); // Corta la fecha en [dia, mes, año]
+            const partes = fechaTexto.split('/'); 
             if (partes.length === 3) {
               const fechaFin = new Date(partes[2], partes[1] - 1, partes[0]);
               const hoy = new Date();
               hoy.setHours(0,0,0,0);
               
-              // Restar las fechas y convertir de milisegundos a días
-              const diferenciaMilisegundos = fechaFin - hoy;
-              const dias = Math.ceil(diferenciaMilisegundos / (1000 * 60 * 60 * 24));
+              const difMs = fechaFin - hoy;
+              const dias = Math.ceil(difMs / (1000 * 60 * 60 * 24));
               
               if (dias > 0) {
-                diasRestantesTxt = `<div class="texto-secundario" style="color: #e0f2f1;">⏱️ Te quedan ${dias} días</div>`;
+                diasRestantesTxt = `<div class="texto-secundario">⏱️ Te quedan ${dias} días</div>`;
               } else if (dias === 0) {
-                diasRestantesTxt = `<div class="texto-secundario" style="color: #ffeb3b; font-weight: bold;">⚠️ Vence HOY</div>`;
+                diasRestantesTxt = `<div class="alerta-dias">⚠️ Vence HOY</div>`;
               }
             }
           }
 
           if (estatus === "VALIDO") {
-            // Mostrar Bienvenida
-            statusDiv.className = 'success';
-            statusDiv.innerHTML = `
-              🔓 ¡BIENVENIDO!
+            overlay.className = 'show success';
+            overlayContent.innerHTML = `
+              <div class="icono-popup">🔓</div>
+              <div class="titulo-popup">¡BIENVENIDO!</div>
               <div class="nombre-socio">${nombreSocio}</div>
               <div class="texto-secundario">ID Socio: ${socioId}</div>
               ${diasRestantesTxt}
@@ -152,21 +176,25 @@
             img.src = "http://192.168.1.156/abrir?t=" + new Date().getTime();
 
           } else {
-            // Mostrar Denegado
-            statusDiv.className = 'error';
+            overlay.className = 'show error';
             let motivo = fechaTexto ? `Vencido el: ${fechaTexto}` : "Membresía inactiva";
-            statusDiv.innerHTML = `
-              ❌ ACCESO DENEGADO
+            overlayContent.innerHTML = `
+              <div class="icono-popup">❌</div>
+              <div class="titulo-popup">ACCESO DENEGADO</div>
               <div class="nombre-socio">${nombreSocio}</div>
               <div class="texto-secundario">ID Socio: ${socioId}<br>${motivo}</div>
             `;
           }
 
-          resetReader(4500); // 4.5 segundos para leer todo
+          resetReader(4500); 
         })
         .catch(err => {
-          statusDiv.className = 'error';
-          statusDiv.innerText = 'Error de conexión con la base de datos';
+          overlay.className = 'show error';
+          overlayContent.innerHTML = `
+            <div class="icono-popup">⚠️</div>
+            <div class="titulo-popup">Error de conexión</div>
+            <div class="texto-secundario">No se pudo contactar la base de datos.</div>
+          `;
           resetReader(3500);
         });
     }
@@ -190,9 +218,6 @@
             if (cameras && cameras.length) {
               const cameraId = cameras.length > 1 ? cameras[1].id : cameras[0].id;
               html5QrCode.start(cameraId, config, onScanSuccess);
-            } else {
-              statusDiv.className = 'error';
-              statusDiv.innerText = 'No se detectó cámara disponible';
             }
           });
         });
