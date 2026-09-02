@@ -63,13 +63,36 @@
     const statusDiv = document.getElementById('status');
     let isScanningLocked = false;
 
-    function onScanSuccess(decodedText) {
+   function onScanSuccess(decodedText) {
       if (isScanningLocked) return;
-      isScanningLocked = true; // Bloquea lecturas múltiples mientras procesa
+      isScanningLocked = true;
 
       statusDiv.className = 'loading';
       statusDiv.innerText = 'Validando acceso...';
 
+      // 1. Validar que el QR sea estrictamente un enlace de tu script
+      const esScriptValido = decodedText.includes("script.google.com") || decodedText.includes("script.googleusercontent.com");
+
+      if (!esScriptValido) {
+        statusDiv.className = 'error';
+        statusDiv.innerText = 'QR no reconocido / Inválido';
+        resetReader(3000);
+        return;
+      }
+
+      // 2. Si pasa el filtro, ejecuta la llamada al script de la puerta
+      fetch(decodedText, { method: 'GET', mode: 'no-cors' })
+        .then(() => {
+          statusDiv.className = 'success';
+          statusDiv.innerText = '¡ACCESO CONCEDIDO!';
+          resetReader(3500);
+        })
+        .catch(err => {
+          statusDiv.className = 'error';
+          statusDiv.innerText = 'Error al contactar el servidor';
+          resetReader(3500);
+        });
+    }
       // Si el QR trae la URL directa del script, la llamamos:
       const requestUrl = decodedText;
 
