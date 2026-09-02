@@ -45,7 +45,7 @@
       width: 95vw;
       max-width: 500px;
       transition: all 0.25s ease;
-      min-height: 80px;
+      min-height: 110px; /* Un poco más alto para las nuevas líneas */
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -54,7 +54,8 @@
     .loading { background: #0277bd; color: #fff; }
     .success { background: #00c853; color: #fff; box-shadow: 0px 4px 10px rgba(0,200,83,0.3); }
     .error { background: #d50000; color: #fff; }
-    .nombre-socio { font-size: 0.95rem; font-weight: normal; margin-top: 5px; }
+    .nombre-socio { font-size: 1.1rem; font-weight: bold; margin-top: 6px; }
+    .texto-secundario { font-size: 0.9em; font-weight: normal; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -93,40 +94,75 @@
         return;
       }
 
-      // 2. Agregar el parámetro api=1 para aprovechar tu código
+      // 2. Extraer el ID de Socio de la URL del QR (ej. ...?socio=123)
       let requestUrl = decodedText;
+      let socioId = "N/A";
+      try {
+        const urlParams = new URLSearchParams(requestUrl.substring(requestUrl.indexOf('?')));
+        if (urlParams.has('socio')) socioId = urlParams.get('socio');
+      } catch(e) {}
+
+      // 3. Agregar el parámetro api=1
       if (!requestUrl.includes("api=1")) {
         requestUrl += (requestUrl.includes("?") ? "&" : "?") + "api=1";
       }
 
-      // 3. Hacer la petición a Google (Le quitamos el 'no-cors' para poder leer tu texto)
+      // 4. Hacer la petición a Google
       fetch(requestUrl)
         .then(response => response.text())
         .then(text => {
-          // Tu script devuelve algo como "VALIDO|Juan Perez|31/12/2026"
           const datos = text.split('|');
           const estatus = datos[0]; 
           const nombreSocio = datos[1] || "Socio no encontrado";
-          const fecha = datos[2] || "";
+          const fechaTexto = datos[2] || ""; // Viene como dd/MM/yyyy
+
+          // 5. Calcular los días restantes
+          let diasRestantesTxt = "";
+          if (fechaTexto) {
+            const partes = fechaTexto.split('/'); // Corta la fecha en [dia, mes, año]
+            if (partes.length === 3) {
+              const fechaFin = new Date(partes[2], partes[1] - 1, partes[0]);
+              const hoy = new Date();
+              hoy.setHours(0,0,0,0);
+              
+              // Restar las fechas y convertir de milisegundos a días
+              const diferenciaMilisegundos = fechaFin - hoy;
+              const dias = Math.ceil(diferenciaMilisegundos / (1000 * 60 * 60 * 24));
+              
+              if (dias > 0) {
+                diasRestantesTxt = `<div class="texto-secundario" style="color: #e0f2f1;">⏱️ Te quedan ${dias} días</div>`;
+              } else if (dias === 0) {
+                diasRestantesTxt = `<div class="texto-secundario" style="color: #ffeb3b; font-weight: bold;">⚠️ Vence HOY</div>`;
+              }
+            }
+          }
 
           if (estatus === "VALIDO") {
-            // Mostrar verde con nombre
+            // Mostrar Bienvenida
             statusDiv.className = 'success';
-            statusDiv.innerHTML = `🔓 ACCESO CONCEDIDO<div class="nombre-socio">${nombreSocio}</div>`;
+            statusDiv.innerHTML = `
+              🔓 ¡BIENVENIDO!
+              <div class="nombre-socio">${nombreSocio}</div>
+              <div class="texto-secundario">ID Socio: ${socioId}</div>
+              ${diasRestantesTxt}
+            `;
             
-            // Disparar la Raspberry Pi Pico localmente desde la tablet
+            // Disparar la Raspberry Pi Pico
             let img = new Image();
             img.src = "http://192.168.1.156/abrir?t=" + new Date().getTime();
 
           } else {
-            // Mostrar rojo con motivo de rechazo
+            // Mostrar Denegado
             statusDiv.className = 'error';
-            let motivo = fecha ? `Vencido: ${fecha}` : "Membresía inactiva";
-            statusDiv.innerHTML = `❌ ACCESO DENEGADO<div class="nombre-socio">${nombreSocio}<br>${motivo}</div>`;
+            let motivo = fechaTexto ? `Vencido el: ${fechaTexto}` : "Membresía inactiva";
+            statusDiv.innerHTML = `
+              ❌ ACCESO DENEGADO
+              <div class="nombre-socio">${nombreSocio}</div>
+              <div class="texto-secundario">ID Socio: ${socioId}<br>${motivo}</div>
+            `;
           }
 
-          // Le damos 4 segundos a la persona para que lea su nombre antes de resetear
-          resetReader(4000); 
+          resetReader(4500); // 4.5 segundos para leer todo
         })
         .catch(err => {
           statusDiv.className = 'error';
@@ -140,7 +176,6 @@
 
       const config = {
         fps: 10,
-        // Hacemos el área de escaneo más grande (80% de la pantalla)
         qrbox: function(viewfinderWidth, viewfinderHeight) {
           let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
           let qrboxSize = Math.floor(minEdgeSize * 0.8);
