@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Acceso QR</title>
-  <!-- Librería del escáner QR -->
+  <title>Control de Acceso</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -20,13 +19,13 @@
       overflow: hidden;
     }
     h1 {
-      font-size: 1.4rem;
-      margin-bottom: 15px;
-      color: #ddd;
+      font-size: 1.3rem;
+      margin-bottom: 12px;
+      color: #ccc;
     }
     #reader {
       width: 90vw;
-      max-width: 450px;
+      max-width: 420px;
       border-radius: 12px;
       overflow: hidden;
       border: 2px solid #333;
@@ -37,15 +36,15 @@
       border-radius: 10px;
     }
     #status {
-      margin-top: 20px;
-      padding: 15px 25px;
-      font-size: 1.2rem;
+      margin-top: 18px;
+      padding: 14px 20px;
+      font-size: 1.1rem;
       font-weight: bold;
       border-radius: 8px;
       text-align: center;
       width: 90vw;
-      max-width: 450px;
-      transition: all 0.3s ease;
+      max-width: 420px;
+      transition: all 0.25s ease;
     }
     .idle { background: #222; color: #888; border: 1px solid #333; }
     .loading { background: #0277bd; color: #fff; }
@@ -62,52 +61,7 @@
   <script>
     const statusDiv = document.getElementById('status');
     let isScanningLocked = false;
-
-   function onScanSuccess(decodedText) {
-      if (isScanningLocked) return;
-      isScanningLocked = true;
-
-      statusDiv.className = 'loading';
-      statusDiv.innerText = 'Validando acceso...';
-
-      // 1. Validar que el QR sea estrictamente un enlace de tu script
-      const esScriptValido = decodedText.includes("script.google.com") || decodedText.includes("script.googleusercontent.com");
-
-      if (!esScriptValido) {
-        statusDiv.className = 'error';
-        statusDiv.innerText = 'QR no reconocido / Inválido';
-        resetReader(3000);
-        return;
-      }
-
-      // 2. Si pasa el filtro, ejecuta la llamada al script de la puerta
-      fetch(decodedText, { method: 'GET', mode: 'no-cors' })
-        .then(() => {
-          statusDiv.className = 'success';
-          statusDiv.innerText = '¡ACCESO CONCEDIDO!';
-          resetReader(3500);
-        })
-        .catch(err => {
-          statusDiv.className = 'error';
-          statusDiv.innerText = 'Error al contactar el servidor';
-          resetReader(3500);
-        });
-    }
-      // Si el QR trae la URL directa del script, la llamamos:
-      const requestUrl = decodedText;
-
-      fetch(requestUrl, { method: 'GET', mode: 'no-cors' })
-        .then(() => {
-          statusDiv.className = 'success';
-          statusDiv.innerText = '¡ACCESO CONCEDIDO!';
-          resetReader(3500); // Muestra el mensaje verde por 3.5 segundos
-        })
-        .catch(err => {
-          statusDiv.className = 'error';
-          statusDiv.innerText = 'Error al contactar el servidor';
-          resetReader(3500);
-        });
-    }
+    let html5QrCode = null;
 
     function resetReader(delayMs) {
       setTimeout(() => {
@@ -117,20 +71,67 @@
       }, delayMs);
     }
 
-    const html5QrCode = new Html5Qrcode("reader");
+    function onScanSuccess(decodedText) {
+      if (isScanningLocked) return;
+      isScanningLocked = true;
 
-    // Inicia forzando la cámara frontal ("user")
-    html5QrCode.start(
-      { facingMode: "user" },
-      {
+      statusDiv.className = 'loading';
+      statusDiv.innerText = 'Validando acceso...';
+
+      // Validación estricta del dominio del script
+      const esScriptValido = decodedText.includes("script.google.com") || decodedText.includes("script.googleusercontent.com");
+
+      if (!esScriptValido) {
+        statusDiv.className = 'error';
+        statusDiv.innerText = 'QR inválido / No autorizado';
+        resetReader(3000);
+        return;
+      }
+
+      // Enviar solicitud al Google Apps Script
+      fetch(decodedText, { method: 'GET', mode: 'no-cors' })
+        .then(() => {
+          statusDiv.className = 'success';
+          statusDiv.innerText = '¡ACCESO CONCEDIDO!';
+          resetReader(3500);
+        })
+        .catch(err => {
+          statusDiv.className = 'error';
+          statusDiv.innerText = 'Error de conexión con el servidor';
+          resetReader(3500);
+        });
+    }
+
+    function initScanner() {
+      html5QrCode = new Html5Qrcode("reader");
+
+      const config = {
         fps: 10,
-        qrbox: { width: 250, height: 250 }
-      },
-      onScanSuccess
-    ).catch(err => {
-      statusDiv.className = 'error';
-      statusDiv.innerText = 'Error al iniciar cámara: ' + err;
-    });
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0
+      };
+
+      // Iniciar con cámara frontal ('user')
+      html5QrCode.start({ facingMode: "user" }, config, onScanSuccess)
+        .catch(err => {
+          console.warn("Fallo con facingMode: user, intentando fallback...", err);
+          // Fallback en caso de que Android reporte los IDs de cámara de forma no estándar
+          Html5Qrcode.getCameras().then(cameras => {
+            if (cameras && cameras.length) {
+              const cameraId = cameras.length > 1 ? cameras[1].id : cameras[0].id;
+              html5QrCode.start(cameraId, config, onScanSuccess);
+            } else {
+              statusDiv.className = 'error';
+              statusDiv.innerText = 'No se detectó cámara disponible';
+            }
+          }).catch(camErr => {
+            statusDiv.className = 'error';
+            statusDiv.innerText = 'Error de acceso a la cámara: ' + camErr;
+          });
+        });
+    }
+
+    window.addEventListener('DOMContentLoaded', initScanner);
   </script>
 </body>
 </html>
