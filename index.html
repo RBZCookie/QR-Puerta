@@ -39,7 +39,7 @@
       border-radius: 9px;
     }
     
-    /* --- ESTILOS DEL POP-UP (OVERLAY) --- */
+    /* --- POP-UP A PANTALLA COMPLETA --- */
     #overlay {
       position: fixed;
       top: 0;
@@ -50,15 +50,14 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      z-index: 9999; /* Por encima de todo */
+      z-index: 9999;
       opacity: 0;
-      pointer-events: none; /* Para que no estorbe si está invisible */
+      pointer-events: none;
       transition: opacity 0.3s ease;
       text-align: center;
       padding: 20px;
     }
     
-    /* Clases para mostrar el pop-up */
     #overlay.show {
       opacity: 1;
       pointer-events: auto;
@@ -67,8 +66,8 @@
     #overlay.success { background-color: rgba(0, 200, 83, 1); } /* Verde sólido */
     #overlay.error { background-color: rgba(213, 0, 0, 1); }    /* Rojo sólido */
 
-    /* Tipografía grande para el pop-up */
-    .icono-popup { font-size: 4rem; margin-bottom: 10px; }
+    /* Tipografía grande centrada */
+    .icono-popup { font-size: 4.5rem; margin-bottom: 15px; }
     .titulo-popup { font-size: 2.5rem; font-weight: bold; margin-bottom: 20px; text-transform: uppercase; }
     .nombre-socio { font-size: 3rem; font-weight: bold; margin-bottom: 15px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
     .texto-secundario { font-size: 1.5rem; margin-top: 10px; }
@@ -80,7 +79,6 @@
   <h1>Control de Acceso</h1>
   <div id="reader"></div>
 
-  <!-- POP-UP QUE CUBRE LA PANTALLA -->
   <div id="overlay">
     <div id="overlay-content"></div>
   </div>
@@ -93,23 +91,36 @@
 
     function resetReader(delayMs) {
       setTimeout(() => {
-        overlay.className = ''; // Quita todas las clases (oculta el pop-up)
+        overlay.className = '';
         overlayContent.innerHTML = '';
         isScanningLocked = false;
       }, delayMs);
+    }
+
+    function dispararPico() {
+      // Disparo usando iframe invisible (salta bloqueo de seguridad Mixed Content)
+      let disparador = document.createElement('iframe');
+      disparador.style.display = 'none';
+      disparador.src = "http://192.168.1.156/abrir?t=" + new Date().getTime();
+      document.body.appendChild(disparador);
+      
+      setTimeout(() => {
+        if (disparador.parentNode) disparador.parentNode.removeChild(disparador);
+      }, 2000);
     }
 
     function onScanSuccess(decodedText) {
       if (isScanningLocked) return;
       isScanningLocked = true;
 
-      // Muestra pantalla azul de carga
+      // Muestra pantalla de carga temporal
       overlay.className = 'show loading';
       overlayContent.innerHTML = `
         <div class="icono-popup">⏳</div>
         <div class="titulo-popup">Validando acceso...</div>
       `;
 
+      // 1. Validar que sea un link de tu script
       const esScriptValido = decodedText.includes("script.google.com") || decodedText.includes("script.googleusercontent.com");
 
       if (!esScriptValido) {
@@ -123,6 +134,7 @@
         return;
       }
 
+      // 2. Extraer el ID de Socio de la URL
       let requestUrl = decodedText;
       let socioId = "N/A";
       try {
@@ -130,10 +142,12 @@
         if (urlParams.has('socio')) socioId = urlParams.get('socio');
       } catch(e) {}
 
+      // 3. Forzar parámetro api=1 para tu script
       if (!requestUrl.includes("api=1")) {
         requestUrl += (requestUrl.includes("?") ? "&" : "?") + "api=1";
       }
 
+      // 4. Petición a Google Apps Script
       fetch(requestUrl)
         .then(response => response.text())
         .then(text => {
@@ -142,6 +156,7 @@
           const nombreSocio = datos[1] || "Socio no encontrado";
           const fechaTexto = datos[2] || ""; 
 
+          // 5. Calcular días restantes de membresía
           let diasRestantesTxt = "";
           if (fechaTexto) {
             const partes = fechaTexto.split('/'); 
@@ -162,6 +177,7 @@
           }
 
           if (estatus === "VALIDO") {
+            // MOSTRAR PANTALLA VERDE Y ABRIR PUERTA
             overlay.className = 'show success';
             overlayContent.innerHTML = `
               <div class="icono-popup">🔓</div>
@@ -171,11 +187,11 @@
               ${diasRestantesTxt}
             `;
             
-            // Disparar la Raspberry Pi Pico
-            let img = new Image();
-            img.src = "http://192.168.1.156/abrir?t=" + new Date().getTime();
+            // Disparar relé de la Pico
+            dispararPico();
 
           } else {
+            // MOSTRAR PANTALLA ROJA (RECHAZADO / VENCIDO)
             overlay.className = 'show error';
             let motivo = fechaTexto ? `Vencido el: ${fechaTexto}` : "Membresía inactiva";
             overlayContent.innerHTML = `
@@ -193,7 +209,7 @@
           overlayContent.innerHTML = `
             <div class="icono-popup">⚠️</div>
             <div class="titulo-popup">Error de conexión</div>
-            <div class="texto-secundario">No se pudo contactar la base de datos.</div>
+            <div class="texto-secundario">No se pudo conectar con la base de datos.</div>
           `;
           resetReader(3500);
         });
