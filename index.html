@@ -8,37 +8,51 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background-color: #111;
+      background-color: #000;
       color: #fff;
       font-family: Arial, Helvetica, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      overflow: hidden;
-      position: relative;
+      overflow: hidden; /* Evita barras de desplazamiento */
     }
-   h1 {
+    
+    h1 {
       position: absolute;
       top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
       font-size: 1.5rem;
-      color: rgba(255, 255, 255, 0.8);
+      color: rgba(255, 255, 255, 0.9);
       z-index: 20;
       text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+      width: 100%;
+      text-align: center;
     }
-  #reader {
+
+    /* --- HACK EXTREMO PARA PANTALLA COMPLETA --- */
+    #reader {
       width: 100vw !important;
       height: 100vh !important;
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
       border: none !important;
-      background: #000;
+      background: #000 !important;
       z-index: 10;
     }
-    #reader video {
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: cover !important;
+    /* Obliga al contenedor oculto de la librería a expandirse */
+    #reader > div {
+      width: 100vw !important;
+      height: 100vh !important;
     }
+    /* Estira el video a las 4 esquinas */
+    #reader video {
+      width: 100vw !important;
+      height: 100vh !important;
+      object-fit: cover !important; 
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+    }
+    /* ------------------------------------------- */
     
     /* --- POP-UP A PANTALLA COMPLETA --- */
     #overlay {
@@ -59,15 +73,11 @@
       padding: 20px;
     }
     
-    #overlay.show {
-      opacity: 1;
-      pointer-events: auto;
-    }
+    #overlay.show { opacity: 1; pointer-events: auto; }
     #overlay.loading { background-color: rgba(2, 119, 189, 0.95); }
-    #overlay.success { background-color: rgba(0, 200, 83, 1); } /* Verde sólido */
-    #overlay.error { background-color: rgba(213, 0, 0, 1); }    /* Rojo sólido */
+    #overlay.success { background-color: rgba(0, 200, 83, 1); } 
+    #overlay.error { background-color: rgba(213, 0, 0, 1); }    
 
-    /* Tipografía grande centrada */
     .icono-popup { font-size: 4.5rem; margin-bottom: 15px; }
     .titulo-popup { font-size: 2.5rem; font-weight: bold; margin-bottom: 20px; text-transform: uppercase; }
     .nombre-socio { font-size: 3rem; font-weight: bold; margin-bottom: 15px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
@@ -219,14 +229,12 @@
     function initScanner() {
       html5QrCode = new Html5Qrcode("reader");
 
-      const config = {
+     const config = {
         fps: 15,
-        // Calcula automáticamente la proporción de la pantalla de la tablet
-        aspectRatio: window.innerWidth / window.innerHeight, 
         qrbox: function(viewfinderWidth, viewfinderHeight) {
-          // Usa el 85% de la pantalla para el cuadro verde de escaneo
+          // Calcula el cuadro verde basándose en el lado más corto de tu tablet
           let minEdgeSize = Math.min(window.innerWidth, window.innerHeight);
-          let qrboxSize = Math.floor(minEdgeSize * 0.85);
+          let qrboxSize = Math.floor(minEdgeSize * 0.75); 
           return { width: qrboxSize, height: qrboxSize };
         }
       };
