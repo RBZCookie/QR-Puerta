@@ -19,24 +19,28 @@
       overflow: hidden;
       position: relative;
     }
-    h1 {
+   h1 {
+      position: absolute;
+      top: 20px;
       font-size: 1.5rem;
-      margin-bottom: 20px;
-      color: #ccc;
-      z-index: 10;
+      color: rgba(255, 255, 255, 0.8);
+      z-index: 20;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
     }
     #reader {
-      width: 95vw;
-      max-width: 600px;
-      border-radius: 12px;
-      overflow: hidden;
-      border: 3px solid #333;
+      width: 100vw;
+      height: 100vh;
+      max-width: none;
+      border: none;
+      border-radius: 0;
       background: #000;
       z-index: 10;
     }
     #reader video {
-      object-fit: cover;
-      border-radius: 9px;
+      width: 100% !important;
+      height: 100vh !important;
+      object-fit: cover !important;
+      border-radius: 0;
     }
     
     /* --- POP-UP A PANTALLA COMPLETA --- */
@@ -219,13 +223,13 @@
       html5QrCode = new Html5Qrcode("reader");
 
       const config = {
-        fps: 10,
+        fps: 15, // Acelerado ligeramente para capturar en movimiento
         qrbox: function(viewfinderWidth, viewfinderHeight) {
+          // El cuadro abarcará el 95% del lado más corto de la pantalla
           let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
-          let qrboxSize = Math.floor(minEdgeSize * 0.8);
+          let qrboxSize = Math.floor(minEdgeSize * 0.95);
           return { width: qrboxSize, height: qrboxSize };
-        },
-        aspectRatio: 1.0
+        }
       };
 
       html5QrCode.start({ facingMode: "user" }, config, onScanSuccess)
