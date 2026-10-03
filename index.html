@@ -6,12 +6,15 @@
   <title>Control de Acceso</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
+    /* RESET TOTAL */
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background-color: #000;
       color: #fff;
       font-family: Arial, Helvetica, sans-serif;
-      overflow: hidden; /* Evita barras de desplazamiento */
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
     }
     
     h1 {
@@ -19,31 +22,27 @@
       top: 20px;
       left: 50%;
       transform: translateX(-50%);
-      font-size: 1.5rem;
-      color: rgba(255, 255, 255, 0.9);
+      font-size: 2rem;
+      color: #fff;
       z-index: 20;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+      text-shadow: 2px 2px 10px #000, -2px -2px 10px #000;
       width: 100%;
       text-align: center;
+      pointer-events: none; /* Para que no estorbe toques */
     }
 
-    /* --- HACK EXTREMO PARA PANTALLA COMPLETA --- */
+    /* ELIMINAMOS RESTRICCIONES DEL CONTENEDOR */
     #reader {
       width: 100vw !important;
       height: 100vh !important;
-      position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
       border: none !important;
       background: #000 !important;
-      z-index: 10;
+      position: absolute;
+      top: 0;
+      left: 0;
     }
-    /* Obliga al contenedor oculto de la librería a expandirse */
-    #reader > div {
-      width: 100vw !important;
-      height: 100vh !important;
-    }
-    /* Estira el video a las 4 esquinas */
+    
+    /* FORZAMOS EL VIDEO A LLENAR LA PANTALLA */
     #reader video {
       width: 100vw !important;
       height: 100vh !important;
@@ -51,9 +50,16 @@
       position: absolute !important;
       top: 0 !important;
       left: 0 !important;
+      z-index: 1;
     }
-    /* ------------------------------------------- */
     
+    /* OCULTAMOS ELEMENTOS EXTRA DE LA LIBRERÍA */
+    #reader__dashboard_section_csr,
+    #reader__dashboard_section_swaplink,
+    #reader a { 
+      display: none !important; 
+    }
+
     /* --- POP-UP A PANTALLA COMPLETA --- */
     #overlay {
       position: fixed;
@@ -83,11 +89,29 @@
     .nombre-socio { font-size: 3rem; font-weight: bold; margin-bottom: 15px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
     .texto-secundario { font-size: 1.5rem; margin-top: 10px; }
     .alerta-dias { color: #ffeb3b; font-weight: bold; font-size: 1.8rem; margin-top: 15px; }
+
+    /* MARCO DECORATIVO (Guía visual para el cliente) */
+    .marco-escaner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 50%;
+      height: 50%;
+      border: 4px dashed rgba(255, 255, 255, 0.4);
+      border-radius: 20px;
+      z-index: 15;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
 
   <h1>Control de Acceso</h1>
+  
+  <!-- Marco visual decorativo -->
+  <div class="marco-escaner"></div>
+
   <div id="reader"></div>
 
   <div id="overlay">
@@ -99,6 +123,20 @@
     const overlayContent = document.getElementById('overlay-content');
     let isScanningLocked = false;
     let html5QrCode = null;
+    
+    // Temporizador anti-crasheo de RAM
+    let temporizadorInactividad;
+    const TIEMPO_RECARGA_MS = 15 * 60 * 1000;
+
+    function reiniciarTemporizador() {
+      clearTimeout(temporizadorInactividad);
+      temporizadorInactividad = setTimeout(() => {
+        window.location.reload(true);
+      }, TIEMPO_RECARGA_MS);
+    }
+    window.addEventListener('load', reiniciarTemporizador);
+    window.addEventListener('touchstart', reiniciarTemporizador);
+    window.addEventListener('click', reiniciarTemporizador);
 
     function resetReader(delayMs) {
       setTimeout(() => {
@@ -109,12 +147,10 @@
     }
 
     function dispararPico() {
-      // Disparo usando iframe invisible (salta bloqueo de seguridad Mixed Content)
       let disparador = document.createElement('iframe');
       disparador.style.display = 'none';
       disparador.src = "http://192.168.1.156/abrir?t=" + new Date().getTime();
       document.body.appendChild(disparador);
-      
       setTimeout(() => {
         if (disparador.parentNode) disparador.parentNode.removeChild(disparador);
       }, 2000);
@@ -123,15 +159,14 @@
     function onScanSuccess(decodedText) {
       if (isScanningLocked) return;
       isScanningLocked = true;
+      reiniciarTemporizador();
 
-      // Muestra pantalla de carga temporal
       overlay.className = 'show loading';
       overlayContent.innerHTML = `
         <div class="icono-popup">⏳</div>
         <div class="titulo-popup">Validando acceso...</div>
       `;
 
-      // 1. Validar que sea un link de tu script
       const esScriptValido = decodedText.includes("script.google.com") || decodedText.includes("script.googleusercontent.com");
 
       if (!esScriptValido) {
@@ -145,7 +180,6 @@
         return;
       }
 
-      // 2. Extraer el ID de Socio de la URL
       let requestUrl = decodedText;
       let socioId = "N/A";
       try {
@@ -153,12 +187,10 @@
         if (urlParams.has('socio')) socioId = urlParams.get('socio');
       } catch(e) {}
 
-      // 3. Forzar parámetro api=1 para tu script
       if (!requestUrl.includes("api=1")) {
         requestUrl += (requestUrl.includes("?") ? "&" : "?") + "api=1";
       }
 
-      // 4. Petición a Google Apps Script
       fetch(requestUrl)
         .then(response => response.text())
         .then(text => {
@@ -167,7 +199,6 @@
           const nombreSocio = datos[1] || "Socio no encontrado";
           const fechaTexto = datos[2] || ""; 
 
-          // 5. Calcular días restantes de membresía
           let diasRestantesTxt = "";
           if (fechaTexto) {
             const partes = fechaTexto.split('/'); 
@@ -188,7 +219,6 @@
           }
 
           if (estatus === "VALIDO") {
-            // MOSTRAR PANTALLA VERDE Y ABRIR PUERTA
             overlay.className = 'show success';
             overlayContent.innerHTML = `
               <div class="icono-popup">🔓</div>
@@ -197,12 +227,8 @@
               <div class="texto-secundario">ID Socio: ${socioId}</div>
               ${diasRestantesTxt}
             `;
-            
-            // Disparar relé de la Pico
             dispararPico();
-
           } else {
-            // MOSTRAR PANTALLA ROJA (RECHAZADO / VENCIDO)
             overlay.className = 'show error';
             let motivo = fechaTexto ? `Vencido el: ${fechaTexto}` : "Membresía inactiva";
             overlayContent.innerHTML = `
@@ -212,7 +238,6 @@
               <div class="texto-secundario">ID Socio: ${socioId}<br>${motivo}</div>
             `;
           }
-
           resetReader(4500); 
         })
         .catch(err => {
@@ -229,15 +254,16 @@
     function initScanner() {
       html5QrCode = new Html5Qrcode("reader");
 
-     const config = {
+      // CONFIGURACIÓN "NUCLEAR": Sin qrbox para usar TODA la pantalla, forzando alta resolución
+      const config = {
         fps: 15,
-        qrbox: function(viewfinderWidth, viewfinderHeight) {
-          // Calcula el cuadro verde basándose en el lado más corto de tu tablet
-          let minEdgeSize = Math.min(window.innerWidth, window.innerHeight);
-          let qrboxSize = Math.floor(minEdgeSize * 0.75); 
-          return { width: qrboxSize, height: qrboxSize };
+        videoConstraints: {
+          facingMode: "user",
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
         }
       };
+
       html5QrCode.start({ facingMode: "user" }, config, onScanSuccess)
         .catch(err => {
           Html5Qrcode.getCameras().then(cameras => {
