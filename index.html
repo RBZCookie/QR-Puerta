@@ -192,7 +192,15 @@
       }
 
       fetch(requestUrl)
-        .then(response => response.text())
+       // --- NUEVO: SISTEMA DE TIMEOUT (8 segundos) ---
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      fetch(requestUrl, { signal: controller.signal })
+        .then(response => {
+          clearTimeout(timeoutId); // Si responde a tiempo, cancelamos el cronómetro de error
+          return response.text();
+        })
         .then(text => {
           const datos = text.split('|');
           const estatus = datos[0]; 
@@ -241,16 +249,15 @@
           resetReader(4500); 
         })
         .catch(err => {
+          // Si el internet falla o pasan los 8 segundos, entra aquí y LIBERA LA PANTALLA
           overlay.className = 'show error';
           overlayContent.innerHTML = `
             <div class="icono-popup">⚠️</div>
-            <div class="titulo-popup">Error de conexión</div>
-            <div class="texto-secundario">No se pudo conectar con la base de datos.</div>
+            <div class="titulo-popup">Revisar Conexión</div>
+            <div class="texto-secundario">El servidor tardó mucho en responder.<br>Vuelve a escanear tu QR.</div>
           `;
-          resetReader(3500);
+          resetReader(4000); // Esto es clave: quita la pantalla de error y reactiva la cámara
         });
-    }
-
     function initScanner() {
       html5QrCode = new Html5Qrcode("reader");
 
