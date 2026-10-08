@@ -28,10 +28,10 @@
       text-shadow: 2px 2px 10px #000, -2px -2px 10px #000;
       width: 100%;
       text-align: center;
-      pointer-events: none; /* Para que no estorbe toques */
+      pointer-events: none;
     }
 
-    /* ELIMINAMOS RESTRICCIONES DEL CONTENEDOR */
+    /* FORZAMOS EL ESCÁNER A PANTALLA COMPLETA */
     #reader {
       width: 100vw !important;
       height: 100vh !important;
@@ -42,7 +42,7 @@
       left: 0;
     }
     
-    /* FORZAMOS EL VIDEO A LLENAR LA PANTALLA */
+    /* FORZAMOS EL VIDEO A LLENAR LA PANTALLA SIN DEFORMARSE */
     #reader video {
       width: 100vw !important;
       height: 100vh !important;
@@ -53,14 +53,14 @@
       z-index: 1;
     }
     
-    /* OCULTAMOS ELEMENTOS EXTRA DE LA LIBRERÍA */
+    /* OCULTAMOS TEXTOS Y BOTONES EXTRA DE LA LIBRERÍA */
     #reader__dashboard_section_csr,
     #reader__dashboard_section_swaplink,
     #reader a { 
       display: none !important; 
     }
 
-    /* --- POP-UP A PANTALLA COMPLETA --- */
+    /* --- POP-UP DE AVISOS --- */
     #overlay {
       position: fixed;
       top: 0;
@@ -90,7 +90,7 @@
     .texto-secundario { font-size: 1.5rem; margin-top: 10px; }
     .alerta-dias { color: #ffeb3b; font-weight: bold; font-size: 1.8rem; margin-top: 15px; }
 
-    /* MARCO DECORATIVO (Guía visual para el cliente) */
+    /* MARCO DECORATIVO BLANCO */
     .marco-escaner {
       position: absolute;
       top: 50%;
@@ -108,10 +108,7 @@
 <body>
 
   <h1>Control de Acceso</h1>
-  
-  <!-- Marco visual decorativo -->
   <div class="marco-escaner"></div>
-
   <div id="reader"></div>
 
   <div id="overlay">
@@ -124,7 +121,7 @@
     let isScanningLocked = false;
     let html5QrCode = null;
     
-    // Temporizador anti-crasheo de RAM
+    // --- TEMPORIZADOR ANTI-CRASHEO DE MEMORIA (15 MIN) ---
     let temporizadorInactividad;
     const TIEMPO_RECARGA_MS = 15 * 60 * 1000;
 
@@ -138,6 +135,7 @@
     window.addEventListener('touchstart', reiniciarTemporizador);
     window.addEventListener('click', reiniciarTemporizador);
 
+    // --- FUNCIÓN PARA LIMPIAR LA PANTALLA ---
     function resetReader(delayMs) {
       setTimeout(() => {
         overlay.className = '';
@@ -146,6 +144,7 @@
       }, delayMs);
     }
 
+    // --- FUNCIÓN PARA MANDAR LA SEÑAL AL RELÉ ---
     function dispararPico() {
       let disparador = document.createElement('iframe');
       disparador.style.display = 'none';
@@ -156,6 +155,7 @@
       }, 2000);
     }
 
+    // --- LÓGICA PRINCIPAL AL LEER EL QR ---
     function onScanSuccess(decodedText) {
       if (isScanningLocked) return;
       isScanningLocked = true;
@@ -191,14 +191,13 @@
         requestUrl += (requestUrl.includes("?") ? "&" : "?") + "api=1";
       }
 
-      fetch(requestUrl)
-       // --- NUEVO: SISTEMA DE TIMEOUT (8 segundos) ---
+      // --- ESCUDO ANTI-PANTALLA AZUL (TIMEOUT DE 8 SEGUNDOS) ---
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       fetch(requestUrl, { signal: controller.signal })
         .then(response => {
-          clearTimeout(timeoutId); // Si responde a tiempo, cancelamos el cronómetro de error
+          clearTimeout(timeoutId); // Si el internet responde rápido, cancelamos el escudo
           return response.text();
         })
         .then(text => {
@@ -249,23 +248,25 @@
           resetReader(4500); 
         })
         .catch(err => {
-          // Si el internet falla o pasan los 8 segundos, entra aquí y LIBERA LA PANTALLA
+          // --- SI EL INTERNET FALLA O TARDA MÁS DE 8 SEGUNDOS ---
           overlay.className = 'show error';
           overlayContent.innerHTML = `
             <div class="icono-popup">⚠️</div>
             <div class="titulo-popup">Revisar Conexión</div>
-            <div class="texto-secundario">El servidor tardó mucho en responder.<br>Vuelve a escanear tu QR.</div>
+            <div class="texto-secundario">La base de datos tardó en responder.<br>Vuelve a escanear tu QR.</div>
           `;
-          resetReader(4000); // Esto es clave: quita la pantalla de error y reactiva la cámara
+          resetReader(4000); // Esto libera la cámara de nuevo
         });
+    }
+
+    // --- INICIALIZAR LA CÁMARA A PANTALLA COMPLETA ---
     function initScanner() {
       html5QrCode = new Html5Qrcode("reader");
 
-      // CONFIGURACIÓN "NUCLEAR": Sin qrbox para usar TODA la pantalla, forzando alta resolución
       const config = {
         fps: 15,
         videoConstraints: {
-          facingMode: "user",
+          facingMode: "user", // Usa la cámara frontal (pon "environment" si es la trasera)
           width: { ideal: 1920 },
           height: { ideal: 1080 }
         }
